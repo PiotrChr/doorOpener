@@ -1,5 +1,8 @@
 #include <CircularBuffer.h>
 #include <Servo.h>
+#include <Wire.h>
+
+# define I2C_SLAVE_ADDRESS 11
 
 Servo doorServo;  
 
@@ -26,6 +29,12 @@ int servoState = LOW;
 int servoMinSwing = 0;
 int servoMaxSwing = 90;
 
+int piMessageSize = 2;
+int piMessageOpenDoor = 100;
+int piMessageCloseDoor = 1001;
+
+bool piButtonPressed = false;
+
 typedef void (*Job)();
 
 struct Task{
@@ -39,15 +48,48 @@ CircularBuffer <Task, taskLimit> tasks;
 
 void setup() {
   doorServo.attach(servoPin);
-  
+  Serial.begin(9600);
   pinMode(redLedPin, OUTPUT);
   pinMode(greenLedPin, OUTPUT);
   pinMode(buttonPin, INPUT);
-  
-  Serial.begin(9600);
-  
+  setupI2c();
   resetServo();
 }
+
+void resetServo() {
+  doorServo.write(0);
+  delay(2000);
+  }
+
+void setupI2c() {
+  Wire.begin(I2C_SLAVE_ADDRESS);
+  delay(1000);
+//  Wire.onRequest(i2cRequest);
+  Wire.onReceive(i2cReceive);
+  }
+
+void i2cReceive(int howMany) {
+  if (howMany != piMessageSize) {
+    return;
+    }
+  
+  for (int i = 0; i < howMany; i++) {
+    byte c = Wire.read();
+    if (i == piMessageSize - 1) {
+        handleI2cMessage(c);
+      }
+    }
+  }
+
+void handleI2cMessage(int message) {
+  if (message==piMessageOpenDoor) {
+      piButtonPressed = true;
+    }
+  } 
+
+void i2cRequest() {
+    
+  }
 
 void addTask(String name, unsigned long dueDate, void job ()) {
   struct Task task = {name, dueDate, job};
@@ -78,8 +120,11 @@ void toggleLed(String color) {
   }
 
 void checkButton() {
-  int reading = digitalRead(buttonPin);
-  int remote = digitalRead(remoteButtonPin);
+  int reading = piButtonPressed;
+  
+  if (!reading) {
+    int reading = digitalRead(buttonPin);
+    }
   
   unsigned long now = millis();
 
@@ -103,11 +148,6 @@ void checkButton() {
     }
   }
 
-void resetServo() {
-  doorServo.write(0);
-  delay(2000);
-  }
-
 void toggleServo(int state) {
   if (state == servoState) {
     return;
@@ -129,6 +169,8 @@ void toggleServo(int state) {
 }
 
 void buttonPressed() {
+  piButtonPressed = false;
+  
   unsigned long now = millis();
   addTask("ServoHigh", (now), []() {toggleServo(HIGH);});
   addTask("GreenOn", (now+1000), []() {toggleLed("green");});
