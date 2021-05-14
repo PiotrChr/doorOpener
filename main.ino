@@ -10,7 +10,7 @@ int pos = 0;
 const int servoPin = 9;
 const int redLedPin = 8;
 const int greenLedPin = 7;
-const int buttonPin = 6;
+const int buttonPin = 3;
 const int remoteButtonPin = 5;
 
 int redLedState = HIGH;
@@ -19,19 +19,21 @@ int buttonState;
 int lastButtonState = LOW;
 
 unsigned long lastDebounceTime = 0;
-unsigned long debounceDelay = 150; 
+const unsigned long debounceDelay = 150; 
 unsigned long lastButtonLockTime = millis();
-unsigned long buttonLockTime = 3000;
+const unsigned long buttonLockTime = 3000;
 
 bool locked = false;
 
 int servoState = LOW;
-int servoMinSwing = 0;
-int servoMaxSwing = 90;
+const int servoStartPos = 0;
+const int servoMinSwing = 0;
+const int servoMaxSwing = 120;
+const int stepDelay = 5;
 
-int piMessageSize = 2;
-int piMessageOpenDoor = 100;
-int piMessageCloseDoor = 1001;
+const int piMessageSize = 2;
+const int piMessageOpenDoor = 100;
+const int piMessageCloseDoor = 1001;
 
 bool piButtonPressed = false;
 
@@ -47,18 +49,33 @@ const int taskLimit = 20;
 CircularBuffer <Task, taskLimit> tasks;
 
 void setup() {
-  doorServo.attach(servoPin);
-  Serial.begin(9600);
+//  Serial.begin(9600);
   pinMode(redLedPin, OUTPUT);
   pinMode(greenLedPin, OUTPUT);
   pinMode(buttonPin, INPUT);
+  // pinMode(servoPin, OUTPUT)
   setupI2c();
-  resetServo();
+  bootServo();
 }
 
-void resetServo() {
-  doorServo.write(0);
+void stopServo() {
+  doorServo.detach();
+  }
+
+void startServo() {
+  if (doorServo.attached() == false) {
+      doorServo.attach(servoPin);
+    }
+  }
+
+void bootServo() {
+  startServo();
+  
+  delay(1000);
+  doorServo.write(servoStartPos);
   delay(2000);
+
+  stopServo();
   }
 
 void setupI2c() {
@@ -121,9 +138,8 @@ void toggleLed(String color) {
 
 void checkButton() {
   int reading = piButtonPressed;
-  
-  if (!reading) {
-    int reading = digitalRead(buttonPin);
+  if (reading == false) {
+    reading = digitalRead(buttonPin);
     }
   
   unsigned long now = millis();
@@ -154,14 +170,14 @@ void toggleServo(int state) {
     }
 
   if (state == HIGH) {
-    for (int pos = 0; pos <= servoMaxSwing; pos += 1) {
+    for (int pos = servoStartPos; pos <= servoMaxSwing + servoStartPos; pos += 1) {
       doorServo.write(pos);
-      delay(10);
+      delay(stepDelay);
       }
   } else {
-    for (int pos = servoMaxSwing; pos >= 0; pos -= 1) {
+    for (int pos = servoMaxSwing+servoStartPos; pos >= servoStartPos; pos -= 1) {
       doorServo.write(pos);
-      delay(10);
+      delay(stepDelay);
       } 
     }
     
@@ -172,10 +188,12 @@ void buttonPressed() {
   piButtonPressed = false;
   
   unsigned long now = millis();
-  addTask("ServoHigh", (now), []() {toggleServo(HIGH);});
-  addTask("GreenOn", (now+1000), []() {toggleLed("green");});
-  addTask("RedOn", (now+4000), []() {toggleLed("red");});
-  addTask("ServoLow", (now+4500), []() {toggleServo(LOW);});
+  addTask("StartServo", (now), []() {startServo();});
+  addTask("ServoHigh", (now+1000), []() {toggleServo(HIGH);});
+  addTask("GreenOn", (now+2000), []() {toggleLed("green");});
+  addTask("RedOn", (now+5000), []() {toggleLed("red");});
+  addTask("ServoLow", (now+5500), []() {toggleServo(LOW);});
+  addTask("StopServo", (now+7000), []() {stopServo();});
   }
 
 void checkLeds() {
