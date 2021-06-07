@@ -14,8 +14,8 @@ const int stepperMaxSwing = 120;
 const int stepDelayMs = 500;
 const int fullCyclePulses = 200;
 
-float motorMaxSpeed = 25.0;
-float motorSpeed = 25.0;   //pulse per second
+float motorMaxSpeed = 1000.0;
+float motorSpeed = 1000.0;   //pulse per second
 float motorAccel = 1000.0; //87500; //steps/second/second to accelerate
 AccelStepper stepper(1, stepPin, dirPin); 
 
@@ -78,6 +78,8 @@ void setupStepper() {
     stepper.setMaxSpeed(motorMaxSpeed);
     stepper.setSpeed(motorSpeed);
     stepper.setAcceleration(motorAccel);
+
+    stepper.setCurrentPosition(0);
     delay(2000);
   }
 
@@ -88,6 +90,7 @@ void stepperOn() {
 void stepperOff() {
   stepperState = LOW;
   }
+
   
 void setupI2c() {
   Wire.begin(I2C_SLAVE_ADDRESS);
@@ -117,6 +120,10 @@ void handleI2cMessage(int message) {
 
 void i2cRequest() {
 
+}
+
+void resetStepper() {
+  stepper.setCurrentPosition(0);  
 }
 
 void addTask(String name, unsigned long dueDate, void job ()) {
@@ -189,8 +196,8 @@ void moveStepper(float rotation, String dir, int relSpeed = 1) {
   int pulses = (int)(rotation * fullCyclePulses) * ((dir == "right") ? 1 : -1);
   int delayMs = (int)(stepDelayMs / relSpeed);
 
-  Serial.println(pulses);
-  stepper.runToNewPosition(pulses);
+  stepper.moveTo(pulses);
+  stepper.runToPosition();
 //  for(int x = 0; x < pulses; x++) {
 //    digitalWrite(stepPin,HIGH); 
 //    delayMicroseconds(stepDelayMs); 
@@ -204,10 +211,11 @@ void buttonPressed() {
 
   unsigned long now = millis();
   addTask("StartStepper", (now), []() {
+    resetStepper();
     stepperOn();
   });
-  addTask("MoveRight", (now + 1000), []() {
-    moveStepper(0.3, "right", 1);
+  addTask("MoveLeft", (now + 1000), []() {
+    moveStepper(0.9, "left", 1);
   });
   addTask("GreenOn", (now + 2000), []() {
     toggleLed("green");
@@ -215,8 +223,8 @@ void buttonPressed() {
   addTask("RedOn", (now + 5000), []() {
     toggleLed("red");
   });
-//  addTask("MoveLeft", (now + 5500), []() {
-//    moveStepper(0.3, "left", 1);
+//  addTask("MoveRight", (now + 5500), []() {
+//    moveStepper(0.5, "right", 1);
 //  });
   addTask("StopStepper", (now + 6500), []() {
     stepperOff();
